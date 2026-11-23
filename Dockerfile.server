@@ -1,0 +1,42 @@
+# ==========================================
+# Production Dockerfile for Node.js API Server
+# ==========================================
+FROM node:20-bullseye-slim AS base
+
+# Install system dependencies for document/image processing utilities
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ghostscript \
+    poppler-utils \
+    graphicsmagick \
+    imagemagick \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/src/app
+
+# Set production environment
+ENV NODE_ENV=production
+ENV PORT=5000
+
+# Install dependencies
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --silent
+
+# Copy server code
+COPY server/ ./server/
+
+# Create uploads and temp directories with correct permissions
+RUN mkdir -p /usr/src/app/server/uploads /usr/src/app/server/temp && \
+    chown -R node:node /usr/src/app
+
+# Switch to non-privileged user for security
+USER node
+
+# Healthcheck configuration
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:5000/api/health || exit 1
+
+EXPOSE 5000
+
+CMD ["node", "server/index.js"]

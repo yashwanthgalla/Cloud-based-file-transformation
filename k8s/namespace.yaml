@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: convpdf
+  labels:
+    app.kubernetes.io/name: convpdf
+    app.kubernetes.io/part-of: cloud-file-optimization
+    environment: production

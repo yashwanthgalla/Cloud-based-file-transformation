@@ -1,0 +1,9 @@
+apiVersion: v2
+name: convpdf
+description: Production Helm chart for Cloud-Based File Optimization & PDF Platform
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+maintainers:
+  - name: DevOps Engineering Team
+    email: devops@convpdf.example.com

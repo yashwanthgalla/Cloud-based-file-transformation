@@ -1,0 +1,41 @@
+---
+- name: Create application directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+  loop:
+    - /opt/convpdf
+    - /opt/convpdf/uploads
+    - /opt/convpdf/logs
+
+- name: Authenticate with AWS ECR registry
+  shell: |
+    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 123456789012.dkr.ecr.us-east-1.amazonaws.com
+  changed_when: false
+
+- name: Deploy application environment configuration
+  template:
+    src: .env.j2
+    dest: /opt/convpdf/.env
+    owner: ubuntu
+    group: ubuntu
+    mode: '0600'
+
+- name: Deploy production docker-compose configuration
+  template:
+    src: docker-compose.prod.yml.j2
+    dest: /opt/convpdf/docker-compose.yml
+    owner: ubuntu
+    group: ubuntu
+    mode: '0644'
+
+- name: Pull latest container images from ECR
+  command: docker compose -f /opt/convpdf/docker-compose.yml pull
+  register: pull_res
+  changed_when: "'Downloaded' in pull_res.stdout"
+
+- name: Start or restart ConvPDF services
+  command: docker compose -f /opt/convpdf/docker-compose.yml up -d --remove-orphans

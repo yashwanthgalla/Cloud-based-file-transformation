@@ -1,0 +1,28 @@
+# ==========================================
+# Dockerfile for Asynchronous PDF Processing Worker
+# Handles heavy conversion, OCR, and compression jobs
+# ==========================================
+FROM node:20-bullseye-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ghostscript \
+    qpdf \
+    tesseract-ocr \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/src/app
+
+ENV NODE_ENV=production
+ENV WORKER_CONCURRENCY=4
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --silent
+
+COPY server/ ./server/
+
+RUN mkdir -p /tmp/worker-jobs && chown -R node:node /usr/src/app /tmp/worker-jobs
+
+USER node
+
+CMD ["node", "server/index.js"]

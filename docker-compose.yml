@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  # React Frontend (Nginx SPA + Reverse Proxy)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    container_name: convpdf-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - convpdf-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Node.js Express REST API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: convpdf-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - AUTH_SECRET=super-secret-jwt-key-change-in-production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - S3_BUCKET_NAME=convpdf-production-storage
+      - AWS_REGION=us-east-1
+      - MAX_FILE_SIZE_MB=50
+    volumes:
+      - backend-uploads:/usr/src/app/server/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - convpdf-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Asynchronous PDF Optimization & Conversion Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: convpdf-worker
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - WORKER_CONCURRENCY=4
+      - S3_BUCKET_NAME=convpdf-production-storage
+      - AWS_REGION=us-east-1
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - convpdf-net
+    restart: unless-stopped
+
+  # In-memory Queue & Cache for Asynchronous PDF Processing
+  redis:
+    image: redis:7-alpine
+    container_name: convpdf-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - convpdf-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO for Local S3 Simulation during development / local testing
+  minio:
+    image: minio/minio:RELEASE.2024-01-18T22-51-28Z
+    container_name: convpdf-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - convpdf-net
+    profiles:
+      - dev
+
+networks:
+  convpdf-net:
+    driver: bridge
+
+volumes:
+  backend-uploads:
+    driver: local
+  redis-data:
+    driver: local
+  minio-data:
+    driver: local

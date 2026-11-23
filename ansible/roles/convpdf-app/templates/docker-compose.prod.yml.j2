@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  backend:
+    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/convpdf-backend:{{ app_version }}
+    restart: always
+    env_file: .env
+    ports:
+      - "5000:5000"
+    volumes:
+      - /opt/convpdf/uploads:/usr/src/app/server/uploads
+    depends_on:
+      - redis
+
+  worker:
+    image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/convpdf-worker:{{ app_version }}
+    restart: always
+    env_file: .env
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

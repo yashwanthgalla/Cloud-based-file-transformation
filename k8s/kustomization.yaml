@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: convpdf
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - frontend-deployment.yaml
+  - backend-deployment.yaml
+  - worker-and-redis.yaml
+  - ingress.yaml
+  - hpa.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: convpdf
+  environment: production

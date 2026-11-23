@@ -1,0 +1,53 @@
+---
+- name: Baseline OS Security and Hardening
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Ensure unattended-upgrades and ufw are installed
+      apt:
+        name:
+          - unattended-upgrades
+          - ufw
+          - fail2ban
+        state: present
+
+    - name: Configure UFW default policies
+      ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: 'incoming', policy: 'deny' }
+        - { direction: 'outgoing', policy: 'allow' }
+
+    - name: Allow SSH port through UFW
+      ufw:
+        rule: limit
+        port: '22'
+        proto: tcp
+
+    - name: Allow HTTP and HTTPS through UFW
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '80'
+        - '443'
+
+    - name: Enable UFW service
+      ufw:
+        state: enabled
+
+    - name: Disable SSH Password Authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      notify: Restart SSH
+
+  handlers:
+    - name: Restart SSH
+      service:
+        name: sshd
+        state: restarted

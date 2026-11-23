@@ -1,0 +1,42 @@
+# ==========================================
+# Multi-stage Dockerfile for React Frontend
+# Stage 1: Build the production bundle
+# ==========================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install dependencies (utilizing layer caching)
+COPY package.json package-lock.json ./
+RUN npm ci --silent
+
+# Copy application source code
+COPY . .
+
+# Build production assets using Vite
+RUN npm run build
+
+# ==========================================
+# Stage 2: Serve static files with Nginx
+# ==========================================
+FROM nginx:1.25-alpine
+
+# Set non-root permissions and timezone
+ENV TZ=UTC
+
+# Remove default nginx static assets
+RUN rm -rf /usr/share/nginx/html/*
+
+# Copy built assets from builder stage
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy custom Nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Add healthcheck endpoint probe
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:80/health || exit 1
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

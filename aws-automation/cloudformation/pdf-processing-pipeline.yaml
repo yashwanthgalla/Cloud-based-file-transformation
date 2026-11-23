@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation Stack: Asynchronous PDF Processing Event Pipeline (S3 -> SQS -> Lambda -> DynamoDB)'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+    Description: Environment stage name
+
+Resources:
+  # S3 Bucket for file processing
+  ProcessingStorageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'convpdf-${Environment}-event-storage'
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # Dead Letter Queue for failed processing jobs
+  ProcessingDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'convpdf-${Environment}-processing-dlq'
+      MessageRetentionPeriod: 1209600 # 14 days
+
+  # Main SQS Queue for buffering file conversion tasks
+  ProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'convpdf-${Environment}-processing-queue'
+      VisibilityTimeout: 300
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ProcessingDeadLetterQueue.Arn
+        maxReceiveCount: 3
+
+  # DynamoDB Table for tracking status of optimization tasks
+  JobStatusTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'convpdf-${Environment}-job-status'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: jobId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jobId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+Outputs:
+  BucketName:
+    Value: !Ref ProcessingStorageBucket
+    Description: Storage bucket for PDF documents
+  QueueUrl:
+    Value: !Ref ProcessingQueue
+    Description: URL of the SQS Processing Queue
+  DynamoTableName:
+    Value: !Ref JobStatusTable
+    Description: DynamoDB job status tracking table
